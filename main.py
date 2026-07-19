@@ -36,9 +36,17 @@ def save_seen(seen):
     SEEN_FILE.write_text(json.dumps(list(seen)))
 
 def fetch_bandi():
-    r = requests.get(API_URL)
+    payload = {
+        "pagina": 1,
+        "limit": 50,
+        "parolaChiave": "funzionario tecnico",
+        "regione": "Liguria"
+    }
+
+    r = requests.post(API_URL, json=payload)
     r.raise_for_status()
     return r.json().get("avvisi", [])
+
 
 def matches_profile(bando):
     titolo = bando.get("titolo", "").lower()

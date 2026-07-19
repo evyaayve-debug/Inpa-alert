@@ -105,6 +105,7 @@ def main():
     if nuovi:
         send_email(nuovi)
         save_seen(seen)
+send_telegram("Test Telegram: il bot funziona!")
 
 if __name__ == "__main__":
     main()

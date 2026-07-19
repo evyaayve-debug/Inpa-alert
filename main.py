@@ -49,31 +49,53 @@ def save_seen(seen):
 
 
 def fetch_bandi():
-    print("Apro INPA con Playwright (browser mascherato)...")
+    print("Apro INPA con Playwright (stealth mode)...")
 
     bandi = []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=False,  # 🔥 NON HEADLESS
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-web-security",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--disable-dev-shm-usage",
+                "--disable-infobars",
+                "--no-sandbox",
+                "--disable-gpu",
+            ]
+        )
 
         context = browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/124.0.0.0 Safari/537.36"
-            )
+            ),
+            viewport={"width": 1280, "height": 900},
+            java_script_enabled=True,
         )
 
         page = context.new_page()
+
+        # 🔥 Rimuove navigator.webdriver
+        page.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+        )
 
         for page_num in range(0, 20):
             url = BASE_URL + str(page_num)
             print(f"Scarico pagina {page_num}: {url}")
 
-            page.goto(url)
+            try:
+                page.goto(url, timeout=60000)
+            except:
+                print(f"Timeout pagina {page_num}, continuo...")
+                continue
 
             try:
-                page.wait_for_selector(".card-bando-avviso", timeout=15000)
+                page.wait_for_selector(".card-bando-avviso", timeout=20000)
             except:
                 print(f"Pagina {page_num} vuota o bloccata, continuo...")
                 continue

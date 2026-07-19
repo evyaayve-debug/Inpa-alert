@@ -18,18 +18,7 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-# 🔥 URL: bandi aperti Liguria
-URL_BANDI = (
-    "https://www.inpa.gov.it/bandi-e-avvisi/?"
-    "text=&categoriaId=&regioneId=7&status=1&settoreId=&periodo=&ral=&ente=&page_num=0"
-)
-
-# 🔥 URL: avvisi aperti Liguria
-URL_AVVISI = (
-    "https://www.inpa.gov.it/avvisi?"
-    "parolaChiave=&regione=Liguria&stato=aperto"
-)
-
+# 🔥 Parole chiave tecniche
 KEYWORDS = [
     "funzionario tecnico",
     "architetto",
@@ -54,58 +43,45 @@ def save_seen(seen):
     SEEN_FILE.write_text(json.dumps(list(seen)))
 
 
-def parse_bandi_e_avvisi():
-    print("Scarico bandi-e-avvisi...")
-    r = requests.get(URL_BANDI)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
+def fetch_all_pages():
+    print("Scarico tutte le pagine INPA...")
+    all_bandi = []
 
-    cards = soup.select(".card-bando")
-    results = []
+    for page in range(0, 15):  # 🔥 Scansiona 15 pagine
+        url = (
+            "https://www.inpa.gov.it/bandi-e-avvisi/?"
+            f"text=&categoriaId=&regioneId=7&status=1&settoreId=&periodo=&ral=&ente=&page_num={page}"
+        )
 
-    for card in cards:
-        titolo = card.select_one(".card-title").get_text(strip=True)
-        ente = card.select_one(".card-subtitle").get_text(strip=True)
-        link = card.select_one("a")["href"]
+        print(f"Scarico pagina {page}...")
+        r = requests.get(url)
+        if r.status_code != 200:
+            print(f"Pagina {page} non disponibile, interrompo.")
+            break
 
-        results.append({
-            "titolo": titolo,
-            "amministrazione": ente,
-            "urlDettaglio": "https://www.inpa.gov.it" + link,
-            "id": link.split("/")[-1]
-        })
+        soup = BeautifulSoup(r.text, "html.parser")
+        cards = soup.select(".card-bando")
 
-    return results
+        if not cards:
+            print(f"Nessun bando nella pagina {page}, fine.")
+            break
 
+        for card in cards:
+            titolo = card.select_one(".card-title").get_text(strip=True)
+            ente = card.select_one(".card-subtitle").get_text(strip=True)
+            link = card.select_one("a")["href"]
 
-def parse_avvisi():
-    print("Scarico avvisi...")
-    r = requests.get(URL_AVVISI)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
+            bando = {
+                "titolo": titolo,
+                "amministrazione": ente,
+                "urlDettaglio": "https://www.inpa.gov.it" + link,
+                "id": link.split("/")[-1]
+            }
 
-    cards = soup.select(".card-avviso")
-    results = []
+            all_bandi.append(bando)
 
-    for card in cards:
-        titolo = card.select_one(".titolo-avviso").get_text(strip=True)
-        ente = card.select_one(".amministrazione").get_text(strip=True)
-        link = card.select_one("a")["href"]
-
-        results.append({
-            "titolo": titolo,
-            "amministrazione": ente,
-            "urlDettaglio": "https://www.inpa.gov.it" + link,
-            "id": link.split("/")[-1]
-        })
-
-    return results
-
-
-def fetch_all():
-    bandi = parse_bandi_e_avvisi()
-    avvisi = parse_avvisi()
-    return bandi + avvisi
+    print("Totale bandi trovati:", len(all_bandi))
+    return all_bandi
 
 
 def matches_profile(bando):
@@ -157,7 +133,7 @@ def main():
     print("Avvio controllo INPA...")
 
     seen = load_seen()
-    bandi = fetch_all()
+    bandi = fetch_all_pages()
 
     nuovi = []
 

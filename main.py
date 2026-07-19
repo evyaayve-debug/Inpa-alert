@@ -28,6 +28,12 @@ KEYWORDS = [
     "lavori pubblici"
 ]
 
+BASE_URL = (
+    "https://www.inpa.gov.it/bandi-e-avvisi/"
+    "?text=&categoriaId=&regioneId=8&status=&settoreId=bcfb35babe934ef89a0d"
+    "&periodo=&ral=&ente=&page_num="
+)
+
 
 def load_seen():
     if SEEN_FILE.exists():
@@ -43,29 +49,34 @@ def save_seen(seen):
 
 
 def fetch_bandi():
-    print("Apro INPA con Playwright...")
+    print("Apro INPA con Playwright (browser mascherato)...")
 
     bandi = []
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
 
-        for page_num in range(0, 20):  # scansiona fino a 20 pagine
-            url = (
-                "https://www.inpa.gov.it/bandi-e-avvisi/"
-                "?text=&categoriaId=&regioneId=8&status=&settoreId=bcfb35babe934ef89a0d"
-                "&periodo=&ral=&ente=&page_num=" + str(page_num)
+        context = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
             )
+        )
+
+        page = context.new_page()
+
+        for page_num in range(0, 20):
+            url = BASE_URL + str(page_num)
             print(f"Scarico pagina {page_num}: {url}")
 
             page.goto(url)
 
             try:
-                page.wait_for_selector(".card-bando-avviso", timeout=10000)
+                page.wait_for_selector(".card-bando-avviso", timeout=15000)
             except:
-                print(f"Pagina {page_num} vuota o senza card, mi fermo.")
-                break
+                print(f"Pagina {page_num} vuota o bloccata, continuo...")
+                continue
 
             cards = page.query_selector_all(".card-bando-avviso")
 

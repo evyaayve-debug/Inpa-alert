@@ -28,11 +28,7 @@ KEYWORDS = [
     "lavori pubblici"
 ]
 
-SECTIONS = [
-    "https://www.inpa.gov.it/bandi-e-avvisi/?page_num=",
-    "https://www.inpa.gov.it/avvisi?page=",
-    "https://www.inpa.gov.it/incarichi?page="
-]
+URL = "https://www.inpa.gov.it/bandi-e-avvisi/?text=&categoriaId=&regioneId=8&status=&settoreId=bcfb35babe934ef89a0d&periodo=&ral=&ente=&page_num=0"
 
 
 def load_seen():
@@ -48,57 +44,41 @@ def save_seen(seen):
     SEEN_FILE.write_text(json.dumps(list(seen)))
 
 
-def scrape_section(base_url):
+def fetch_bandi():
+    print("Scarico INPA...")
+    r = requests.get(URL)
+    r.raise_for_status()
+
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    # 🔥 CLASSI CORRETTE
+    cards = soup.select(".card-bando-avviso")
+
     bandi = []
 
-    for page in range(0, 20):
-        url = base_url + str(page)
-        print(f"Scarico {url}...")
+    for card in cards:
+        titolo_tag = card.select_one(".titolo-bando-avviso")
+        ente_tag = card.select_one(".amministrazione-bando-avviso")
+        link_tag = card.select_one(".vai-al-bando")
 
-        r = requests.get(url)
-        if r.status_code != 200:
-            print(f"Pagina {page} non disponibile.")
-            break
+        if not link_tag:
+            continue
 
-        soup = BeautifulSoup(r.text, "html.parser")
+        titolo = titolo_tag.get_text(strip=True) if titolo_tag else ""
+        ente = ente_tag.get_text(strip=True) if ente_tag else ""
+        link = link_tag["href"]
 
-        # 🔥 Nuove classi INPA
-        cards = soup.select(".card-bando-avviso")
+        bando = {
+            "titolo": titolo,
+            "amministrazione": ente,
+            "urlDettaglio": "https://www.inpa.gov.it" + link,
+            "id": link.split("=")[-1]
+        }
 
-        if not cards:
-            print(f"Nessun bando nella pagina {page}.")
-            break
+        bandi.append(bando)
 
-        for card in cards:
-            titolo_tag = card.select_one(".titolo-bando-avviso")
-            ente_tag = card.select_one(".amministrazione-bando-avviso")
-            link_tag = card.select_one(".vai-al-bando")
-
-            if not link_tag:
-                continue
-
-            titolo = titolo_tag.get_text(strip=True) if titolo_tag else ""
-            ente = ente_tag.get_text(strip=True) if ente_tag else ""
-            link = link_tag["href"]
-
-            bando = {
-                "titolo": titolo,
-                "amministrazione": ente,
-                "urlDettaglio": "https://www.inpa.gov.it" + link,
-                "id": link.split("=")[-1]
-            }
-
-            bandi.append(bando)
-
+    print("Bandi trovati:", len(bandi))
     return bandi
-
-
-def fetch_all():
-    all_bandi = []
-    for section in SECTIONS:
-        all_bandi.extend(scrape_section(section))
-    print("Totale bandi trovati:", len(all_bandi))
-    return all_bandi
 
 
 def matches_profile(bando):
@@ -150,7 +130,7 @@ def main():
     print("Avvio controllo INPA...")
 
     seen = load_seen()
-    bandi = fetch_all()
+    bandi = fetch_bandi()
 
     nuovi = []
 

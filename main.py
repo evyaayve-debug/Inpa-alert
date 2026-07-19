@@ -62,23 +62,24 @@ def scrape_section(base_url):
 
         soup = BeautifulSoup(r.text, "html.parser")
 
-        cards = soup.select(".card-bando") + soup.select(".card-avviso") + soup.select(".card-incarico")
+        # 🔥 Nuove classi INPA
+        cards = soup.select(".card-bando-avviso")
 
         if not cards:
             print(f"Nessun bando nella pagina {page}.")
             break
 
         for card in cards:
-            link_tag = card.select_one("a")
+            titolo_tag = card.select_one(".titolo-bando-avviso")
+            ente_tag = card.select_one(".amministrazione-bando-avviso")
+            link_tag = card.select_one(".vai-al-bando")
+
             if not link_tag:
                 continue
 
-            link = link_tag["href"]
-            titolo_tag = card.select_one(".card-title") or card.select_one(".titolo-avviso") or card.select_one(".titolo-incarico")
-            ente_tag = card.select_one(".card-subtitle") or card.select_one(".amministrazione")
-
             titolo = titolo_tag.get_text(strip=True) if titolo_tag else ""
             ente = ente_tag.get_text(strip=True) if ente_tag else ""
+            link = link_tag["href"]
 
             bando = {
                 "titolo": titolo,

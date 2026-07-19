@@ -1,38 +1,26 @@
 import os
 import json
-import smtplib
-from email.mime.text import MIMEText
-from pathlib import Path
-from playwright.sync_api import sync_playwright
 import requests
+from bs4 import BeautifulSoup
+from pathlib import Path
 
 SEEN_FILE = Path("seen.json")
-
-EMAIL_SENDER = os.environ.get("EMAIL_SENDER")
-EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
-EMAIL_RECIPIENT = os.environ.get("EMAIL_RECIPIENT")
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
+URL = "https://www.concorsipubblici.com/regione-liguria.htm"
 
 KEYWORDS = [
-    "funzionario tecnico",
-    "architetto",
-    "area tecnica",
+    "tecnico",
+    "funzionario",
     "urbanistica",
     "edilizia",
-    "appalti",
-    "lavori pubblici"
+    "architetto",
+    "ingegnere",
+    "lavori pubblici",
+    "appalti"
 ]
-
-BASE_URL = (
-    "https://www.inpa.gov.it/bandi-e-avvisi/"
-    "?text=&categoriaId=&regioneId=8&status=&settoreId=bcfb35babe934ef89a0d"
-    "&periodo=&ral=&ente=&page_num="
-)
 
 
 def load_seen():
@@ -49,120 +37,49 @@ def save_seen(seen):
 
 
 def fetch_bandi():
-    print("Apro INPA con Playwright (stealth mode)...")
+    print("Scarico concorsi Liguria da ConcorsiPubblici...")
+
+    r = requests.get(URL)
+    r.raise_for_status()
+
+    soup = BeautifulSoup(r.text, "html.parser")
 
     bandi = []
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=False,  # 🔥 NON HEADLESS
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--disable-web-security",
-                "--disable-features=IsolateOrigins,site-per-process",
-                "--disable-dev-shm-usage",
-                "--disable-infobars",
-                "--no-sandbox",
-                "--disable-gpu",
-            ]
-        )
+    # ogni concorso è dentro <div class="box">
+    boxes = soup.select("div.box")
 
-        context = browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            viewport={"width": 1280, "height": 900},
-            java_script_enabled=True,
-        )
+    for box in boxes:
+        titolo_tag = box.select_one("h2 a")
+        ente_tag = box.select_one("p strong")
+        link_tag = box.select_one("h2 a")
 
-        page = context.new_page()
+        if not titolo_tag or not link_tag:
+            continue
 
-        # 🔥 Rimuove navigator.webdriver
-        page.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-        )
+        titolo = titolo_tag.get_text(strip=True)
+        ente = ente_tag.get_text(strip=True) if ente_tag else ""
+        link = link_tag["href"]
 
-        for page_num in range(0, 20):
-            url = BASE_URL + str(page_num)
-            print(f"Scarico pagina {page_num}: {url}")
+        # ID univoco = URL
+        bando_id = link
 
-            try:
-                page.goto(url, timeout=60000)
-            except:
-                print(f"Timeout pagina {page_num}, continuo...")
-                continue
+        bando = {
+            "id": bando_id,
+            "titolo": titolo,
+            "ente": ente,
+            "url": link
+        }
 
-            try:
-                page.wait_for_selector(".card-bando-avviso", timeout=20000)
-            except:
-                print(f"Pagina {page_num} vuota o bloccata, continuo...")
-                continue
+        bandi.append(bando)
 
-            cards = page.query_selector_all(".card-bando-avviso")
-
-            if not cards:
-                print(f"Nessun bando in pagina {page_num}, stop.")
-                break
-
-            for card in cards:
-                titolo_el = card.query_selector(".titolo-bando-avviso")
-                ente_el = card.query_selector(".amministrazione-bando-avviso")
-                link_el = card.query_selector(".vai-al-bando")
-
-                if not (titolo_el and ente_el and link_el):
-                    continue
-
-                titolo = titolo_el.inner_text().strip()
-                ente = ente_el.inner_text().strip()
-                link = link_el.get_attribute("href")
-
-                bando = {
-                    "titolo": titolo,
-                    "amministrazione": ente,
-                    "urlDettaglio": "https://www.inpa.gov.it" + link,
-                    "id": link.split("=")[-1]
-                }
-
-                bandi.append(bando)
-
-        browser.close()
-
-    print("Totale bandi trovati:", len(bandi))
+    print("Bandi trovati:", len(bandi))
     return bandi
 
 
 def matches_profile(bando):
     titolo = bando["titolo"].lower()
-    ente = bando["amministrazione"].lower()
-
-    keyword_ok = any(k in titolo for k in KEYWORDS)
-    luogo_ok = ("liguria" in ente) or ("genova" in ente)
-
-    return keyword_ok and luogo_ok
-
-
-def send_email(new_bandi):
-    if not (EMAIL_SENDER and EMAIL_PASSWORD and EMAIL_RECIPIENT):
-        print("Email non configurata")
-        return
-
-    body = ""
-    for b in new_bandi:
-        body += f"- {b['titolo']}\n  Ente: {b['amministrazione']}\n  Link: {b['urlDettaglio']}\n\n"
-
-    msg = MIMEText(body)
-    msg["Subject"] = "Nuovi bandi INPA"
-    msg["From"] = EMAIL_SENDER
-    msg["To"] = EMAIL_RECIPIENT
-
-    print("Invio email...")
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-        server.starttls()
-        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-        server.send_message(msg)
-    print("Email inviata.")
+    return any(k in titolo for k in KEYWORDS)
 
 
 def send_telegram(message):
@@ -179,7 +96,7 @@ def send_telegram(message):
 
 
 def main():
-    print("Avvio controllo INPA...")
+    print("Avvio controllo concorsi Liguria...")
 
     seen = load_seen()
     bandi = fetch_bandi()
@@ -192,17 +109,14 @@ def main():
             seen.add(b["id"])
 
     if nuovi:
-        print("Nuovi bandi:", len(nuovi))
-        send_email(nuovi)
-
-        testo = "Nuovi bandi INPA:\n\n"
+        testo = "Nuovi concorsi Liguria:\n\n"
         for b in nuovi:
-            testo += f"- {b['titolo']}\n  {b['amministrazione']}\n  {b['urlDettaglio']}\n\n"
+            testo += f"- {b['titolo']}\n  Ente: {b['ente']}\n  Link: {b['url']}\n\n"
 
         send_telegram(testo)
         save_seen(seen)
     else:
-        print("Nessun nuovo bando.")
+        print("Nessun nuovo concorso tecnico.")
 
     send_telegram("Test Telegram: il bot funziona!")
 

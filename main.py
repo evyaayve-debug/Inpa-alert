@@ -72,3 +72,69 @@ def fetch_bandi():
 
         bandi.append({
             "titolo": titolo,
+            "amministrazione": ente,
+            "urlDettaglio": "https://www.inpa.gov.it" + link,
+            "id": link.split("/")[-1]
+        })
+
+    print(f"Trovati {len(bandi)} bandi totali.")
+    return bandi
+
+
+# ---------------------------
+# Filtri
+# ---------------------------
+
+def matches_profile(bando):
+    titolo = bando["titolo"].lower()
+    ente = bando["amministrazione"].lower()
+
+    return (
+        any(k in titolo for k in KEYWORDS)
+        and ("liguria" in ente or "genova" in ente)
+    )
+
+
+# ---------------------------
+# Invio email
+# ---------------------------
+
+def send_email(new_bandi):
+    if not (EMAIL_SENDER and EMAIL_PASSWORD and EMAIL_RECIPIENT):
+        print("Variabili email non configurate")
+        return
+
+    body = ""
+    for b in new_bandi:
+        body += f"- {b['titolo']}\n  Ente: {b['amministrazione']}\n  Link: {b['urlDettaglio']}\n\n"
+
+    msg = MIMEText(body)
+    msg["Subject"] = "Nuovi concorsi INPA per Funzionario Tecnico / Architetto"
+    msg["From"] = EMAIL_SENDER
+    msg["To"] = EMAIL_RECIPIENT
+
+    print("Invio email...")
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        server.starttls()
+        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+        server.send_message(msg)
+    print("Email inviata.")
+
+
+# ---------------------------
+# Invio Telegram
+# ---------------------------
+
+def send_telegram(message):
+    if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
+        print("Telegram non configurato")
+        return
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message
+    }
+
+    print("Invio messaggio Telegram...")
+    r = requests.post(url, json=payload

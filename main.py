@@ -14,7 +14,8 @@ EMAIL_RECIPIENT = os.environ.get("EMAIL_RECIPIENT")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-API_URL = "https://www.inpa.gov.it/api/v1/public/avvisi/search"
+API_URL = "https://www.inpa.gov.it/api/v1/avvisi/search"
+
 
 
 KEYWORDS = [

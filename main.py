@@ -27,7 +27,7 @@ KEYWORDS = [
     "lavori pubblici"
 ]
 
-API_URL = "https://www.inpa.gov.it/api/v1/public/concorsi/filtra"
+API_URL = "https://www.inpa.gov.it/api/v1/public/concorsi/filtra-paginati"
 
 
 def load_seen():
@@ -55,7 +55,8 @@ def fetch_bandi():
         "periodo": "",
         "ral": "",
         "ente": "",
-        "page_num": 0
+        "page": 0,
+        "size": 50
     }
 
     r = requests.post(API_URL, json=payload)

@@ -14,10 +14,8 @@ EMAIL_RECIPIENT = os.environ.get("EMAIL_RECIPIENT")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-API_URL = (
-    "https://www.inpa.gov.it/api/v1/public/avvisi?"
-    "pagina=1&limit=50&parolaChiave=funzionario%20tecnico&regione=Liguria"
-)
+API_URL = "https://www.inpa.gov.it/api/v1/public/avvisi/search"
+
 
 KEYWORDS = [
     "funzionario tecnico",

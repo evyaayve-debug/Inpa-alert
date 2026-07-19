@@ -18,13 +18,18 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-# 🔥 URL: tutti i bandi aperti della Liguria
-INPA_URL = (
+# 🔥 URL: bandi aperti Liguria
+URL_BANDI = (
     "https://www.inpa.gov.it/bandi-e-avvisi/?"
     "text=&categoriaId=&regioneId=7&status=1&settoreId=&periodo=&ral=&ente=&page_num=0"
 )
 
-# 🔥 Parole chiave tecniche
+# 🔥 URL: avvisi aperti Liguria
+URL_AVVISI = (
+    "https://www.inpa.gov.it/avvisi?"
+    "parolaChiave=&regione=Liguria&stato=aperto"
+)
+
 KEYWORDS = [
     "funzionario tecnico",
     "architetto",
@@ -49,34 +54,58 @@ def save_seen(seen):
     SEEN_FILE.write_text(json.dumps(list(seen)))
 
 
-def fetch_bandi():
-    print("Scarico INPA...")
-    r = requests.get(INPA_URL)
+def parse_bandi_e_avvisi():
+    print("Scarico bandi-e-avvisi...")
+    r = requests.get(URL_BANDI)
     r.raise_for_status()
-
     soup = BeautifulSoup(r.text, "html.parser")
 
-    # 🔥 Classe corretta per la pagina nuova
     cards = soup.select(".card-bando")
-
-    bandi = []
+    results = []
 
     for card in cards:
         titolo = card.select_one(".card-title").get_text(strip=True)
         ente = card.select_one(".card-subtitle").get_text(strip=True)
         link = card.select_one("a")["href"]
 
-        bando = {
+        results.append({
             "titolo": titolo,
             "amministrazione": ente,
             "urlDettaglio": "https://www.inpa.gov.it" + link,
             "id": link.split("/")[-1]
-        }
+        })
 
-        bandi.append(bando)
+    return results
 
-    print("Bandi trovati:", len(bandi))
-    return bandi
+
+def parse_avvisi():
+    print("Scarico avvisi...")
+    r = requests.get(URL_AVVISI)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    cards = soup.select(".card-avviso")
+    results = []
+
+    for card in cards:
+        titolo = card.select_one(".titolo-avviso").get_text(strip=True)
+        ente = card.select_one(".amministrazione").get_text(strip=True)
+        link = card.select_one("a")["href"]
+
+        results.append({
+            "titolo": titolo,
+            "amministrazione": ente,
+            "urlDettaglio": "https://www.inpa.gov.it" + link,
+            "id": link.split("/")[-1]
+        })
+
+    return results
+
+
+def fetch_all():
+    bandi = parse_bandi_e_avvisi()
+    avvisi = parse_avvisi()
+    return bandi + avvisi
 
 
 def matches_profile(bando):
@@ -94,17 +123,9 @@ def send_email(new_bandi):
         print("Email non configurata")
         return
 
-    body_lines = []
-
+    body = ""
     for b in new_bandi:
-        line = (
-            "- " + b["titolo"] + "\n"
-            "  Ente: " + b["amministrazione"] + "\n"
-            "  Link: " + b["urlDettaglio"] + "\n"
-        )
-        body_lines.append(line)
-
-    body = "\n".join(body_lines)
+        body += f"- {b['titolo']}\n  Ente: {b['amministrazione']}\n  Link: {b['urlDettaglio']}\n\n"
 
     msg = MIMEText(body)
     msg["Subject"] = "Nuovi bandi INPA"
@@ -112,5 +133,54 @@ def send_email(new_bandi):
     msg["To"] = EMAIL_RECIPIENT
 
     print("Invio email...")
-    with smtplplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-        server
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        server.starttls()
+        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+        server.send_message(msg)
+    print("Email inviata.")
+
+
+def send_telegram(message):
+    if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
+        print("Telegram non configurato")
+        return
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
+
+    print("Invio Telegram...")
+    r = requests.post(url, json=payload)
+    print("Risposta Telegram:", r.text)
+
+
+def main():
+    print("Avvio controllo INPA...")
+
+    seen = load_seen()
+    bandi = fetch_all()
+
+    nuovi = []
+
+    for b in bandi:
+        if b["id"] not in seen and matches_profile(b):
+            nuovi.append(b)
+            seen.add(b["id"])
+
+    if nuovi:
+        print("Nuovi bandi:", len(nuovi))
+        send_email(nuovi)
+
+        testo = "Nuovi bandi INPA:\n\n"
+        for b in nuovi:
+            testo += f"- {b['titolo']}\n  {b['amministrazione']}\n  {b['urlDettaglio']}\n\n"
+
+        send_telegram(testo)
+        save_seen(seen)
+    else:
+        print("Nessun nuovo bando.")
+
+    send_telegram("Test Telegram: il bot funziona!")
+
+
+if __name__ == "__main__":
+    main()

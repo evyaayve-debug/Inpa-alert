@@ -4,7 +4,6 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 from pathlib import Path
-from bs4 import BeautifulSoup
 
 SEEN_FILE = Path("seen.json")
 
@@ -28,7 +27,7 @@ KEYWORDS = [
     "lavori pubblici"
 ]
 
-URL = "https://www.inpa.gov.it/bandi-e-avvisi/?text=&categoriaId=&regioneId=8&status=&settoreId=bcfb35babe934ef89a0d&periodo=&ral=&ente=&page_num=0"
+API_URL = "https://www.inpa.gov.it/api/v1/public/concorsi/filtra"
 
 
 def load_seen():
@@ -45,36 +44,35 @@ def save_seen(seen):
 
 
 def fetch_bandi():
-    print("Scarico INPA...")
-    r = requests.get(URL)
+    print("Scarico INPA via API...")
+
+    payload = {
+        "text": "",
+        "categoriaId": "",
+        "regioneId": "8",  # Liguria
+        "status": "",
+        "settoreId": "bcfb35babe934ef89a0d",  # settore tecnico
+        "periodo": "",
+        "ral": "",
+        "ente": "",
+        "page_num": 0
+    }
+
+    r = requests.post(API_URL, json=payload)
     r.raise_for_status()
 
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    # 🔥 CLASSI CORRETTE
-    cards = soup.select(".card-bando-avviso")
+    data = r.json()
 
     bandi = []
 
-    for card in cards:
-        titolo_tag = card.select_one(".titolo-bando-avviso")
-        ente_tag = card.select_one(".amministrazione-bando-avviso")
-        link_tag = card.select_one(".vai-al-bando")
-
-        if not link_tag:
-            continue
-
-        titolo = titolo_tag.get_text(strip=True) if titolo_tag else ""
-        ente = ente_tag.get_text(strip=True) if ente_tag else ""
-        link = link_tag["href"]
-
+    for item in data.get("contenuto", []):
         bando = {
-            "titolo": titolo,
-            "amministrazione": ente,
-            "urlDettaglio": "https://www.inpa.gov.it" + link,
-            "id": link.split("=")[-1]
+            "id": item["id"],
+            "titolo": item["titolo"],
+            "amministrazione": item["amministrazione"],
+            "regione": item["regione"],
+            "urlDettaglio": f"https://www.inpa.gov.it/bandi-e-avvisi/dettaglio-bando-avviso/?concorso_id={item['id']}"
         }
-
         bandi.append(bando)
 
     print("Bandi trovati:", len(bandi))
@@ -86,7 +84,7 @@ def matches_profile(bando):
     ente = bando["amministrazione"].lower()
 
     keyword_ok = any(k in titolo for k in KEYWORDS)
-    luogo_ok = ("liguria" in ente) or ("genova" in ente)
+    luogo_ok = ("liguria" in bando["regione"].lower()) or ("genova" in ente)
 
     return keyword_ok and luogo_ok
 
@@ -157,3 +155,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

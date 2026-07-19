@@ -4,7 +4,6 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 from pathlib import Path
-from bs4 import BeautifulSoup
 
 SEEN_FILE = Path("seen.json")
 
@@ -43,53 +42,46 @@ def save_seen(seen):
     SEEN_FILE.write_text(json.dumps(list(seen)))
 
 
-def fetch_all_pages():
-    print("Scarico tutte le pagine INPA...")
+def fetch_all_from_api():
+    print("Scarico TUTTI i concorsi dall'API INPA...")
     all_bandi = []
 
-    for page in range(0, 15):  # 🔥 Scansiona 15 pagine
-        url = (
-            "https://www.inpa.gov.it/bandi-e-avvisi/?"
-            f"text=&categoriaId=&regioneId=7&status=1&settoreId=&periodo=&ral=&ente=&page_num={page}"
-        )
+    for page in range(0, 50):  # 🔥 Scansiona 50 pagine dell'API
+        url = f"https://www.inpa.gov.it/api/v1/public/concorsi?page={page}"
+        print(f"Scarico pagina API {page}...")
 
-        print(f"Scarico pagina {page}...")
         r = requests.get(url)
         if r.status_code != 200:
-            print(f"Pagina {page} non disponibile, interrompo.")
+            print(f"Pagina API {page} non disponibile, interrompo.")
             break
 
-        soup = BeautifulSoup(r.text, "html.parser")
-        cards = soup.select(".card-bando")
+        data = r.json()
 
-        if not cards:
-            print(f"Nessun bando nella pagina {page}, fine.")
+        if "contenuto" not in data or not data["contenuto"]:
+            print(f"Nessun concorso nella pagina API {page}, fine.")
             break
 
-        for card in cards:
-            titolo = card.select_one(".card-title").get_text(strip=True)
-            ente = card.select_one(".card-subtitle").get_text(strip=True)
-            link = card.select_one("a")["href"]
-
+        for item in data["contenuto"]:
             bando = {
-                "titolo": titolo,
-                "amministrazione": ente,
-                "urlDettaglio": "https://www.inpa.gov.it" + link,
-                "id": link.split("/")[-1]
+                "id": item.get("id", ""),
+                "titolo": item.get("titolo", "").strip(),
+                "amministrazione": item.get("amministrazione", "").strip(),
+                "regione": item.get("regione", "").strip(),
+                "urlDettaglio": f"https://www.inpa.gov.it/bandi-e-avvisi/dettaglio-bando-avviso/?concorso_id={item.get('id')}"
             }
-
             all_bandi.append(bando)
 
-    print("Totale bandi trovati:", len(all_bandi))
+    print("Totale bandi trovati via API:", len(all_bandi))
     return all_bandi
 
 
 def matches_profile(bando):
     titolo = bando["titolo"].lower()
     ente = bando["amministrazione"].lower()
+    regione = bando["regione"].lower()
 
     keyword_ok = any(k in titolo for k in KEYWORDS)
-    luogo_ok = ("liguria" in ente) or ("genova" in ente)
+    luogo_ok = ("liguria" in regione) or ("genova" in ente)
 
     return keyword_ok and luogo_ok
 
@@ -101,7 +93,7 @@ def send_email(new_bandi):
 
     body = ""
     for b in new_bandi:
-        body += f"- {b['titolo']}\n  Ente: {b['amministrazione']}\n  Link: {b['urlDettaglio']}\n\n"
+        body += f"- {b['titolo']}\n  Ente: {b['amministrazione']}\n  Regione: {b['regione']}\n  Link: {b['urlDettaglio']}\n\n"
 
     msg = MIMEText(body)
     msg["Subject"] = "Nuovi bandi INPA"
@@ -133,7 +125,7 @@ def main():
     print("Avvio controllo INPA...")
 
     seen = load_seen()
-    bandi = fetch_all_pages()
+    bandi = fetch_all_from_api()
 
     nuovi = []
 
@@ -148,7 +140,7 @@ def main():
 
         testo = "Nuovi bandi INPA:\n\n"
         for b in nuovi:
-            testo += f"- {b['titolo']}\n  {b['amministrazione']}\n  {b['urlDettaglio']}\n\n"
+            testo += f"- {b['titolo']}\n  {b['amministrazione']}\n  Regione: {b['regione']}\n  {b['urlDettaglio']}\n\n"
 
         send_telegram(testo)
         save_seen(seen)

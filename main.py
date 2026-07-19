@@ -9,17 +9,22 @@ SEEN_FILE = Path("seen.json")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-URL = "https://www.concorsi.it/concorsi/regione-liguria.htm"
+RSS_URL = "https://www.gazzettaufficiale.it/rss/concorsi"
 
 KEYWORDS = [
-    "tecnico",
     "funzionario",
-    "urbanistica",
-    "edilizia",
+    "tecnico",
     "architetto",
     "ingegnere",
+    "urbanistica",
+    "edilizia",
     "lavori pubblici",
     "appalti"
+]
+
+LUOGHI = [
+    "liguria",
+    "genova"
 ]
 
 
@@ -36,49 +41,45 @@ def save_seen(seen):
     SEEN_FILE.write_text(json.dumps(list(seen)))
 
 
-def fetch_bandi():
-    print("Scarico concorsi Liguria da Concorsi.it...")
+def fetch_concorsi():
+    print("Scarico concorsi da Gazzetta Ufficiale RSS...")
 
-    r = requests.get(URL)
+    r = requests.get(RSS_URL)
     r.raise_for_status()
 
-    soup = BeautifulSoup(r.text, "html.parser")
+    soup = BeautifulSoup(r.text, "xml")
 
-    bandi = []
+    items = soup.find_all("item")
+    concorsi = []
 
-    # ogni concorso è dentro <div class="box_concorso">
-    boxes = soup.select("div.box_concorso")
+    for item in items:
+        title = item.title.get_text(strip=True) if item.title else ""
+        description = item.description.get_text(strip=True) if item.description else ""
+        link = item.link.get_text(strip=True) if item.link else ""
 
-    for box in boxes:
-        titolo_tag = box.select_one("h2 a")
-        ente_tag = box.select_one("p strong")
-        link_tag = box.select_one("h2 a")
+        # ID univoco = link
+        concorso_id = link
 
-        if not titolo_tag or not link_tag:
-            continue
-
-        titolo = titolo_tag.get_text(strip=True)
-        ente = ente_tag.get_text(strip=True) if ente_tag else ""
-        link = link_tag["href"]
-
-        bando_id = link  # URL = ID univoco
-
-        bando = {
-            "id": bando_id,
-            "titolo": titolo,
-            "ente": ente,
+        concorso = {
+            "id": concorso_id,
+            "titolo": title,
+            "descrizione": description,
             "url": link
         }
 
-        bandi.append(bando)
+        concorsi.append(concorso)
 
-    print("Bandi trovati:", len(bandi))
-    return bandi
+    print("Concorsi trovati nel feed:", len(concorsi))
+    return concorsi
 
 
-def matches_profile(bando):
-    titolo = bando["titolo"].lower()
-    return any(k in titolo for k in KEYWORDS)
+def matches_profile(concorso):
+    testo = (concorso["titolo"] + " " + concorso["descrizione"]).lower()
+
+    keyword_ok = any(k in testo for k in KEYWORDS)
+    luogo_ok = any(l in testo for l in LUOGHI)
+
+    return keyword_ok and luogo_ok
 
 
 def send_telegram(message):
@@ -95,29 +96,29 @@ def send_telegram(message):
 
 
 def main():
-    print("Avvio controllo concorsi Liguria...")
+    print("Avvio controllo concorsi Gazzetta Ufficiale...")
 
     seen = load_seen()
-    bandi = fetch_bandi()
+    concorsi = fetch_concorsi()
 
     nuovi = []
 
-    for b in bandi:
-        if b["id"] not in seen and matches_profile(b):
-            nuovi.append(b)
-            seen.add(b["id"])
+    for c in concorsi:
+        if c["id"] not in seen and matches_profile(c):
+            nuovi.append(c)
+            seen.add(c["id"])
 
     if nuovi:
-        testo = "Nuovi concorsi Liguria:\n\n"
-        for b in nuovi:
-            testo += f"- {b['titolo']}\n  Ente: {b['ente']}\n  Link: {b['url']}\n\n"
+        testo = "Nuovi concorsi tecnici Liguria/Genova (Gazzetta Ufficiale):\n\n"
+        for c in nuovi:
+            testo += f"- {c['titolo']}\n  {c['url']}\n\n"
 
         send_telegram(testo)
         save_seen(seen)
     else:
-        print("Nessun nuovo concorso tecnico.")
+        print("Nessun nuovo concorso tecnico per Liguria/Genova.")
 
-    send_telegram("Test Telegram: il bot funziona!")
+    send_telegram("Test RSS Gazzetta: il bot funziona!")
 
 
 if __name__ == "__main__":

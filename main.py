@@ -40,10 +40,14 @@ def fetch_bandi():
         "pagina": 1,
         "limit": 50,
         "parolaChiave": "funzionario tecnico",
-        "regione": "Liguria"
+        "regione": "Liguria",
+        "ordinamento": {
+            "campo": "dataPubblicazione",
+            "direzione": "DESC"
+        }
     }
 
-    r = requests.post(API_URL, json=payload)
+    r = requests.post("https://www.inpa.gov.it/api/v1/avvisi/search", json=payload)
     r.raise_for_status()
     return r.json().get("avvisi", [])
 

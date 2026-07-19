@@ -1,4 +1,4 @@
-name: Concorsi Liguria Alert
+name: Gazzetta Concorsi Alert
 
 on:
   schedule:
@@ -23,7 +23,7 @@ jobs:
           pip install requests
           pip install beautifulsoup4
 
-      - name: Run bot
+      - name: Run RSS bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

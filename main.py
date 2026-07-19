@@ -36,21 +36,32 @@ def load_seen():
 def save_seen(seen):
     SEEN_FILE.write_text(json.dumps(list(seen)))
 
-def fetch_bandi():
-    payload = {
-        "pagina": 1,
-        "limit": 50,
-        "parolaChiave": "funzionario tecnico",
-        "regione": "Liguria",
-        "ordinamento": {
-            "campo": "dataPubblicazione",
-            "direzione": "DESC"
-        }
-    }
+from bs4 import BeautifulSoup
 
-    r = requests.post("https://www.inpa.gov.it/api/v1/avvisi/search", json=payload)
+def fetch_bandi():
+    url = "https://www.inpa.gov.it/avvisi?parolaChiave=funzionario%20tecnico&regione=Liguria"
+    r = requests.get(url)
     r.raise_for_status()
-    return r.json().get("avvisi", [])
+
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    bandi = []
+    cards = soup.select(".card-avviso")
+
+    for card in cards:
+        titolo = card.select_one(".titolo-avviso").get_text(strip=True)
+        ente = card.select_one(".amministrazione").get_text(strip=True)
+        link = card.select_one("a")["href"]
+
+        bandi.append({
+            "titolo": titolo,
+            "amministrazione": ente,
+            "urlDettaglio": "https://www.inpa.gov.it" + link,
+            "id": link.split("/")[-1]
+        })
+
+    return bandi
+
 
 
 def matches_profile(bando):

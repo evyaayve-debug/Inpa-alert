@@ -9,7 +9,7 @@ SEEN_FILE = Path("seen.json")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-URL = "https://www.concorsipubblici.com/regione-liguria.htm"
+URL = "https://www.concorsi.it/concorsi/regione-liguria.htm"
 
 KEYWORDS = [
     "tecnico",
@@ -37,7 +37,7 @@ def save_seen(seen):
 
 
 def fetch_bandi():
-    print("Scarico concorsi Liguria da ConcorsiPubblici...")
+    print("Scarico concorsi Liguria da Concorsi.it...")
 
     r = requests.get(URL)
     r.raise_for_status()
@@ -46,8 +46,8 @@ def fetch_bandi():
 
     bandi = []
 
-    # ogni concorso è dentro <div class="box">
-    boxes = soup.select("div.box")
+    # ogni concorso è dentro <div class="box_concorso">
+    boxes = soup.select("div.box_concorso")
 
     for box in boxes:
         titolo_tag = box.select_one("h2 a")
@@ -61,8 +61,7 @@ def fetch_bandi():
         ente = ente_tag.get_text(strip=True) if ente_tag else ""
         link = link_tag["href"]
 
-        # ID univoco = URL
-        bando_id = link
+        bando_id = link  # URL = ID univoco
 
         bando = {
             "id": bando_id,

@@ -46,4 +46,71 @@ def load_seen():
 
 
 def save_seen(seen):
-    SEEN_FILE.write_text(json.dumps(list(seen
+    SEEN_FILE.write_text(json.dumps(list(seen)))
+
+
+def fetch_bandi():
+    print("Scarico INPA...")
+    r = requests.get(INPA_URL)
+    r.raise_for_status()
+
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    # 🔥 Classe corretta per la pagina nuova
+    cards = soup.select(".card-bando")
+
+    bandi = []
+
+    for card in cards:
+        titolo = card.select_one(".card-title").get_text(strip=True)
+        ente = card.select_one(".card-subtitle").get_text(strip=True)
+        link = card.select_one("a")["href"]
+
+        bando = {
+            "titolo": titolo,
+            "amministrazione": ente,
+            "urlDettaglio": "https://www.inpa.gov.it" + link,
+            "id": link.split("/")[-1]
+        }
+
+        bandi.append(bando)
+
+    print("Bandi trovati:", len(bandi))
+    return bandi
+
+
+def matches_profile(bando):
+    titolo = bando["titolo"].lower()
+    ente = bando["amministrazione"].lower()
+
+    keyword_ok = any(k in titolo for k in KEYWORDS)
+    luogo_ok = ("liguria" in ente) or ("genova" in ente)
+
+    return keyword_ok and luogo_ok
+
+
+def send_email(new_bandi):
+    if not (EMAIL_SENDER and EMAIL_PASSWORD and EMAIL_RECIPIENT):
+        print("Email non configurata")
+        return
+
+    body_lines = []
+
+    for b in new_bandi:
+        line = (
+            "- " + b["titolo"] + "\n"
+            "  Ente: " + b["amministrazione"] + "\n"
+            "  Link: " + b["urlDettaglio"] + "\n"
+        )
+        body_lines.append(line)
+
+    body = "\n".join(body_lines)
+
+    msg = MIMEText(body)
+    msg["Subject"] = "Nuovi bandi INPA"
+    msg["From"] = EMAIL_SENDER
+    msg["To"] = EMAIL_RECIPIENT
+
+    print("Invio email...")
+    with smtplplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        server

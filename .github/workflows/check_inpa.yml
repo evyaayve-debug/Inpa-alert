@@ -1,9 +1,9 @@
-name: Inpa Alert
+name: Concorsi Liguria Alert
 
 on:
   schedule:
-    - cron: "0 */3 * * *"   # ogni 3 ore
-  workflow_dispatch:        # avvio manuale
+    - cron: "0 */3 * * *"
+  workflow_dispatch:
 
 jobs:
   run:
@@ -18,40 +18,13 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install system dependencies
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libnss3 \
-            libatk1.0-0 \
-            libatk-bridge2.0-0 \
-            libcups2 \
-            libdrm2 \
-            libxkbcommon0 \
-            libxcomposite1 \
-            libxdamage1 \
-            libxfixes3 \
-            libxrandr2 \
-            libgbm1 \
-            libasound2 \
-            libpangocairo-1.0-0 \
-            libpango-1.0-0 \
-            libcairo2 \
-            libatspi2.0-0 \
-            libgtk-3-0
-
-      - name: Install Python dependencies
-        run: |
-          pip install playwright
-          playwright install chromium
           pip install requests
           pip install beautifulsoup4
 
-      - name: Run INPA bot
+      - name: Run bot
         env:
-          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
